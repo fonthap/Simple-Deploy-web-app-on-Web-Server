@@ -1,0 +1,71 @@
+---
+- name: Upload static web files to Nginx
+  vars_files:
+    - var.yaml  
+  hosts: webserver
+  become: true
+  tasks:
+    - name: check if file exists on remote server
+      ansible.builtin.stat:
+        path: "{{ path_zip }}/{{name_zip}}"
+      register: file_stat
+
+    - name: Copy zip file to remote server
+      ansible.builtin.copy:
+        src: "{{ local_file_path }}/{{name_zip}}"
+        dest: "{{ path_zip }}/{{name_zip}}"
+      when: file_stat.stat.exists == False
+        
+    - name: check sha256sum of local file and remote file
+      ansible.builtin.shell: sha256sum "{{ local_file_path }}/{{name_zip}}"
+      register: local_sha256sum
+      delegate_to: 127.0.0.1
+
+    - name: check sha256sum of remote file 
+      ansible.builtin.shell: sha256sum "{{ path_zip }}/{{name_zip}}"
+      register: remote_sha256sum
+
+    - name: fail if sha256sum is not equal
+      ansible.builtin.fail:
+        msg: "sha256sum is not equal"
+      when: local_sha256sum.stdout.split()[0] != remote_sha256sum.stdout.split()[0] 
+      
+    - name: check server status nginx_server
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: create folder
+      ansible.builtin.file:
+        path: "{{ path_unzip }}/tmp"
+        state: directory
+
+    - name: unzip file
+      ansible.builtin.unarchive:
+        src: "{{ path_zip }}/{{ name_zip }}"
+        dest: "{{ path_unzip }}/tmp"
+        remote_src: true
+
+    - name: Copy file unzipped to nginx server
+      ansible.builtin.copy:
+        src: "{{ path_unzip }}/tmp/"
+        dest: /usr/share/nginx/html
+        remote_src: true
+
+    - name: restart nginx server
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+        daemon_reload: yes  
+
+    - name: clean up all zip files  
+      ansible.builtin.file:
+        path: "{{ path_zip }}/{{name_zip}}"
+        state: absent
+
+    - name: clean up all unzipped files
+      ansible.builtin.file:
+        path: "{{ path_unzip }}/tmp"
+        state: absent

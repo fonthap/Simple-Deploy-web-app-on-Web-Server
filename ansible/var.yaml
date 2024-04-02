@@ -1,0 +1,5 @@
+---
+local_file_path: /home/vagrant/ansible
+path_zip: /home/vagrant
+path_unzip: /home/vagrant
+name_zip: zip_file.zip
